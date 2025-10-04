@@ -26,6 +26,10 @@ const BlogSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    isOnHomePage: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true } // auto adds createdAt & updatedAt
 );
