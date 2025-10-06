@@ -83,6 +83,104 @@ export const getBlogs = async (req, res) => {
   }
 };
 
+//pagination wise api for blog getting
+export const getBlogsPagination = async (req, res) => {
+  try {
+    const { page = 1, limit = 9, category, search } = req.query;
+
+    // Build query
+    const query = {};
+
+    // Category filter
+    if (category && category !== "All") {
+      query.category = category;
+    }
+
+    // Search filter (search in title and description)
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const limitNum = parseInt(limit);
+
+    // Execute query with pagination
+    // Only select fields needed for blog listing page (not full description)
+    const blogs = await Blog.find(query)
+      .select("_id title imageUrl date category tags createdAt") // Exclude full description for performance
+      .sort({ createdAt: -1 }) // Latest first
+      .skip(skip)
+      .limit(limitNum)
+      .lean(); // Returns plain JS objects (faster)
+
+    // Get total count for pagination
+    const totalBlogs = await Blog.countDocuments(query);
+    const totalPages = Math.ceil(totalBlogs / limitNum);
+
+    res.status(200).json({
+      success: true,
+      blogs,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages,
+        totalBlogs,
+        limit: limitNum,
+        hasNextPage: parseInt(page) < totalPages,
+        hasPrevPage: parseInt(page) > 1,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching blogs with pagination:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch blogs",
+      error: error.message,
+    });
+  }
+};
+
+// ========================================
+// GET SINGLE BLOG BY ID (Optimized for Blog Details Page)
+// ========================================
+export const getBlogById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Validate MongoDB ObjectId
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid blog ID format",
+      });
+    }
+
+    // Fetch full blog with all fields
+    const blog = await Blog.findById(id).lean();
+
+    if (!blog) {
+      return res.status(404).json({
+        success: false,
+        message: "Blog not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      blog,
+    });
+  } catch (error) {
+    console.error("Error fetching blog by ID:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch blog",
+      error: error.message,
+    });
+  }
+};
 // @desc   Update Blog (partial or full)
 // @route  PUT /api/blogs/:id
 export const updateBlog = async (req, res) => {
@@ -245,5 +343,107 @@ export const getHomePageBlogs = async (req, res) => {
   } catch (error) {
     console.error("Error fetching homepage blogs:", error);
     res.status(500).json({ message: "Server Error" });
+  }
+};
+
+// hlper apis
+// ========================================
+// GET ALL UNIQUE CATEGORIES
+// ========================================
+export const getCategories = async (req, res) => {
+  try {
+    // Get distinct categories (excluding null/empty)
+    const categories = await Blog.distinct("category", {
+      category: { $exists: true, $ne: null, $ne: "" },
+    });
+
+    res.status(200).json({
+      success: true,
+      categories: categories.sort(), // Alphabetically sorted
+    });
+  } catch (error) {
+    console.error("Error fetching categories:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch categories",
+      error: error.message,
+    });
+  }
+};
+
+// ========================================
+// GET RELATED BLOGS (For Blog Details Page)
+// ========================================
+export const getRelatedBlogs = async (req, res) => {
+  try {
+    const { category, exclude, limit = 2 } = req.query;
+
+    if (!category) {
+      return res.status(400).json({
+        success: false,
+        message: "Category is required",
+      });
+    }
+
+    const query = {
+      category,
+      _id: { $ne: exclude }, // Exclude current blog
+    };
+
+    const relatedBlogs = await Blog.find(query)
+      .select("_id title imageUrl date category tags createdAt")
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .lean();
+
+    res.status(200).json({
+      success: true,
+      blogs: relatedBlogs,
+    });
+  } catch (error) {
+    console.error("Error fetching related blogs:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch related blogs",
+      error: error.message,
+    });
+  }
+};
+
+// ========================================
+// SEARCH BLOGS (Autocomplete/Suggestions)
+// ========================================
+export const searchBlogs = async (req, res) => {
+  try {
+    const { q, limit = 5 } = req.query;
+
+    if (!q || q.length < 2) {
+      return res.status(400).json({
+        success: false,
+        message: "Search query must be at least 2 characters",
+      });
+    }
+
+    const blogs = await Blog.find({
+      $or: [
+        { title: { $regex: q, $options: "i" } },
+        { tags: { $in: [new RegExp(q, "i")] } },
+      ],
+    })
+      .select("_id title category")
+      .limit(parseInt(limit))
+      .lean();
+
+    res.status(200).json({
+      success: true,
+      results: blogs,
+    });
+  } catch (error) {
+    console.error("Error searching blogs:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to search blogs",
+      error: error.message,
+    });
   }
 };

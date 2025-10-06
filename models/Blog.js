@@ -18,9 +18,11 @@ const BlogSchema = new mongoose.Schema(
     },
     category: {
       type: String,
+      index: true,
     },
     tags: {
       type: [String],
+      index: true,
     },
     description: {
       type: String,
@@ -29,11 +31,15 @@ const BlogSchema = new mongoose.Schema(
     isOnHomePage: {
       type: Boolean,
       default: false,
+      index: true,
     },
   },
   { timestamps: true } // auto adds createdAt & updatedAt
 );
 
+// Compound index for common queries
+BlogSchema.index({ createdAt: -1, category: 1 });
+BlogSchema.index({ title: "text", description: "text" }); // Text search index
 // --- Create Model ---
 const Blog = mongoose.model("Blog", BlogSchema);
 
