@@ -330,19 +330,26 @@ export const removeFromHomePage = async (req, res) => {
 
 // @desc   Get all homepage blogs
 // @route  GET /api/blogs/homepage
+// @access Public
 export const getHomePageBlogs = async (req, res) => {
   try {
     const homePageBlogs = await Blog.find({ isOnHomePage: true })
+      .select("imageUrl date title category")
       .sort({ createdAt: -1 })
       .limit(3);
 
-    res.json({
+    res.status(200).json({
+      success: true,
       count: homePageBlogs.length,
       blogs: homePageBlogs,
     });
   } catch (error) {
     console.error("Error fetching homepage blogs:", error);
-    res.status(500).json({ message: "Server Error" });
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: error.message,
+    });
   }
 };
 

@@ -7,6 +7,9 @@ import {
   updateProperty,
   deleteProperty,
   deletePropertyImage,
+  getHomePageProperties,
+  addToHomePage,
+  removeFromHomePage,
 } from "../Controller/propertyController.js";
 import upload from "../middleware/uploadMiddleware.js";
 
@@ -17,6 +20,9 @@ const router = express.Router();
 // @access  Admin
 router.post("/create", upload.array("images", 10), createProperty);
 
+// Homepage routes
+router.get("/homepage", getHomePageProperties);
+
 // @route   GET /api/properties
 // @desc    Get all properties with optional filters
 // @access  Public
@@ -26,7 +32,7 @@ router.get("/", getProperties);
 // @route   GET /api/properties/:id
 // @desc    Get single property by ID
 // @access  Public
-router.get("/:id", getPropertyById);
+router.get("/property/:id", getPropertyById);
 
 // @route   PUT /api/properties/:id
 // @desc    Update a property by ID
@@ -40,5 +46,8 @@ router.delete("/:id", deleteProperty);
 
 // **NEW: Delete single image from property**
 router.delete("/:id/image", deletePropertyImage);
+
+router.put("/:id/add-to-homepage", addToHomePage);
+router.put("/:id/remove-from-homepage", removeFromHomePage);
 
 export default router;
