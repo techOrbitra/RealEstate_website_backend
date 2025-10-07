@@ -15,7 +15,7 @@ const router = express.Router();
 // @route   POST /api/properties/create
 // @desc    Create a new property with multiple images
 // @access  Admin
-router.post("/create", upload.array("images", 10), createProperty);
+router.post("/create", upload.array("images"), createProperty);
 
 // @route   GET /api/properties
 // @desc    Get all properties with optional filters
