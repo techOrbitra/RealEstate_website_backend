@@ -31,7 +31,7 @@ const BlogSchema = new mongoose.Schema(
     isOnHomePage: {
       type: Boolean,
       default: false,
-      index: true,
+      index: true,  
     },
   },
   { timestamps: true } // auto adds createdAt & updatedAt
