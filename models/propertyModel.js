@@ -87,6 +87,10 @@ const PropertySchema = new mongoose.Schema(
       min: 0,
     },
 
+    isOnHomePage: {
+      type: Boolean,
+      default: false,
+    },
     // --- Property Details ---
     bhkCount: {
       type: Number,

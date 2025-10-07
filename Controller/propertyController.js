@@ -66,6 +66,7 @@ export const createProperty = async (req, res) => {
       unitTypes: unitTypes ? JSON.parse(unitTypes) : [],
       highlights: highlights ? JSON.parse(highlights) : [],
       amenities: amenities ? JSON.parse(amenities) : [],
+      isOnHomePage: "false",
     });
 
     const savedProperty = await property.save();
@@ -86,7 +87,7 @@ export const getProperties = async (req, res) => {
   try {
     const {
       page = 1,
-      limit = 10,
+      limit = 12, // ✅ Changed default to 12
       city,
       location,
       propertyType,
@@ -99,10 +100,12 @@ export const getProperties = async (req, res) => {
 
     const query = {};
 
+    // ✅ All filters are now case-insensitive
     if (city) query.city = new RegExp(city.trim(), "i");
     if (location) query.location = new RegExp(location.trim(), "i");
     if (propertyType) query.propertyType = new RegExp(propertyType.trim(), "i");
-    if (propertyStatus) query.propertyStatus = propertyStatus.trim();
+    if (propertyStatus)
+      query.propertyStatus = new RegExp(`^${propertyStatus.trim()}$`, "i"); // ✅ FIXED
     if (minPrice || maxPrice) {
       query.startingPrice = {};
       if (minPrice) query.startingPrice.$gte = Number(minPrice);
@@ -110,24 +113,64 @@ export const getProperties = async (req, res) => {
     }
     if (bhkCount) query.bhkCount = Number(bhkCount);
     if (constructionStatus)
-      query.constructionStatus = constructionStatus.trim();
+      query.constructionStatus = new RegExp(
+        `^${constructionStatus.trim()}$`,
+        "i"
+      ); // ✅ FIXED
 
+    console.log("🔍 Query filters:", query);
+
+    // Fetch properties
     const properties = await Property.find(query)
+      .select({
+        images: { $slice: 1 },
+        propertyStatus: 1,
+        title: 1,
+        location: 1,
+        bhkCount: 1,
+        bathCount: 1,
+        totalArea: 1,
+        handover: 1,
+        amenities: { $slice: 5 },
+        startingPrice: 1,
+      })
       .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
+      .limit(Number(limit)) // ✅ Ensure it's a number
+      .skip((Number(page) - 1) * Number(limit));
+
+    console.log("🔍 Found properties:", properties.length);
+
+    // Transform data
+    const transformedProperties = properties.map((property) => ({
+      _id: property._id,
+      image: property.images?.[0] || null,
+      propertyStatus: property.propertyStatus,
+      title: property.title,
+      location: property.location,
+      bhkCount: property.bhkCount,
+      bathCount: property.bathCount,
+      totalArea: property.totalArea,
+      handover: property.handover,
+      amenities: property.amenities || [],
+      startingPrice: property.startingPrice,
+    }));
 
     const count = await Property.countDocuments(query);
 
-    res.json({
-      properties,
+    res.status(200).json({
+      success: true,
+      properties: transformedProperties,
       totalPages: Math.ceil(count / limit),
       currentPage: Number(page),
       total: count,
     });
   } catch (error) {
     console.error("Error fetching properties:", error);
-    res.status(500).json({ message: "Server Error" });
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: error.message,
+    });
   }
 };
 
@@ -203,16 +246,55 @@ export const updateProperty = async (req, res) => {
 
 // @desc   Delete property
 // @route  DELETE /api/properties/:id
+// @access Private/Admin
 export const deleteProperty = async (req, res) => {
   try {
-    const property = await Property.findByIdAndDelete(req.params.id);
+    const property = await Property.findById(req.params.id);
+
     if (!property) {
-      return res.status(404).json({ message: "Property not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Property not found",
+      });
     }
-    res.json({ message: "Property deleted successfully" });
+
+    // Extract all public_ids and delete from Cloudinary
+    if (property.images && property.images.length > 0) {
+      const publicIds = property.images
+        .map((imageUrl) => getPublicIdFromUrl(imageUrl))
+        .filter((id) => id !== null);
+
+      if (publicIds.length > 0) {
+        try {
+          // Delete multiple images at once
+          const result = await cloudinary.api.delete_resources(publicIds, {
+            resource_type: "image",
+          });
+
+          console.log(`Deleted ${publicIds.length} images from Cloudinary`);
+        } catch (error) {
+          console.error(
+            "Error deleting images from Cloudinary:",
+            error.message
+          );
+        }
+      }
+    }
+
+    // Delete property from database
+    await Property.findByIdAndDelete(req.params.id);
+
+    res.status(200).json({
+      success: true,
+      message: "Property and all associated images deleted successfully",
+    });
   } catch (error) {
     console.error("Error deleting property:", error);
-    res.status(500).json({ message: "Server Error" });
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: error.message,
+    });
   }
 };
 
@@ -292,4 +374,154 @@ const getPublicIdFromUrl = (url) => {
     publicIdWithExtension.lastIndexOf(".")
   );
   return publicId;
+};
+
+// @desc   Add property to homepage
+// @route  PUT /api/properties/:id/add-to-homepage
+// @access Private/Admin
+export const addToHomePage = async (req, res) => {
+  try {
+    const propertyId = req.params.id;
+
+    // Check if property exists
+    const property = await Property.findById(propertyId);
+    if (!property) {
+      return res.status(404).json({
+        success: false,
+        message: "Property not found",
+      });
+    }
+
+    // Check if property is already on homepage
+    if (property.isOnHomePage) {
+      return res.status(400).json({
+        success: false,
+        message: "Property is already on the homepage",
+      });
+    }
+
+    // Count current homepage properties
+    const homePageCount = await Property.countDocuments({ isOnHomePage: true });
+
+    // Check if limit is reached (maximum 8)
+    if (homePageCount >= 8) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Homepage limit reached. Maximum 8 properties allowed. Please remove a property first.",
+      });
+    }
+
+    // Update property to add to homepage
+    property.isOnHomePage = true;
+    await property.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Property added to homepage successfully",
+      property: {
+        _id: property._id,
+        title: property.title,
+        isOnHomePage: property.isOnHomePage,
+      },
+    });
+  } catch (error) {
+    console.error("Error adding property to homepage:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: error.message,
+    });
+  }
+};
+
+// @desc   Remove property from homepage
+// @route  PUT /api/properties/:id/remove-from-homepage
+// @access Private/Admin
+export const removeFromHomePage = async (req, res) => {
+  try {
+    const propertyId = req.params.id;
+
+    // Check if property exists
+    const property = await Property.findById(propertyId);
+    if (!property) {
+      return res.status(404).json({
+        success: false,
+        message: "Property not found",
+      });
+    }
+
+    // Check if property is on homepage
+    if (!property.isOnHomePage) {
+      return res.status(400).json({
+        success: false,
+        message: "Property is not on the homepage",
+      });
+    }
+
+    // Update property to remove from homepage
+    property.isOnHomePage = false;
+    await property.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Property removed from homepage successfully",
+      property: {
+        _id: property._id,
+        title: property.title,
+        isOnHomePage: property.isOnHomePage,
+      },
+    });
+  } catch (error) {
+    console.error("Error removing property from homepage:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: error.message,
+    });
+  }
+};
+// @desc   Get all homepage properties
+// @route  GET /api/properties/homepage
+// @access Public
+export const getHomePageProperties = async (req, res) => {
+  try {
+    // Include 'images' in the select to access property.images
+    const homePageProperties = await Property.find({ isOnHomePage: true })
+      .select("images title location bhkCount totalArea handover startingPrice")
+      .sort({ createdAt: -1 })
+      .limit(8);
+
+    if (homePageProperties.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No properties found for homepage",
+      });
+    }
+
+    // Map through properties to add only the first image
+    const propertiesWithFirstImage = homePageProperties.map((property) => ({
+      _id: property._id,
+      image: property.images?.[0] || null, // Get first image or null
+      title: property.title,
+      location: property.location,
+      bhkCount: property.bhkCount,
+      totalArea: property.totalArea,
+      handover: property.handover,
+      startingPrice: property.startingPrice,
+    }));
+
+    res.status(200).json({
+      success: true,
+      count: propertiesWithFirstImage.length,
+      properties: propertiesWithFirstImage,
+    });
+  } catch (error) {
+    console.error("Error fetching homepage properties:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: error.message,
+    });
+  }
 };
