@@ -10,6 +10,7 @@ import {
   getHomePageProperties,
   addToHomePage,
   removeFromHomePage,
+  getAllPropertiesAdmin,
 } from "../Controller/propertyController.js";
 import upload from "../middleware/uploadMiddleware.js";
 
@@ -28,6 +29,11 @@ router.get("/homepage", getHomePageProperties);
 // @access  Public
 // Query params: page, limit, city, location, propertyType, propertyStatus, minPrice, maxPrice, bhkCount, constructionStatus
 router.get("/", getProperties);
+
+// @route   GET /api/properties/admin/all
+// @desc    Get all properties for admin
+// @access  Private/Admin
+router.get("/admin/all", getAllPropertiesAdmin);
 
 // @route   GET /api/properties/:id
 // @desc    Get single property by ID

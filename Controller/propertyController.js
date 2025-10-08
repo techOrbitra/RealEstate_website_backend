@@ -525,3 +525,27 @@ export const getHomePageProperties = async (req, res) => {
     });
   }
 };
+
+// @desc   Get all properties for admin (complete data)
+// @route  GET /api/properties/admin/all
+// @access Private/Admin
+export const getAllPropertiesAdmin = async (req, res) => {
+  try {
+    // Fetch all properties without pagination
+    const properties = await Property.find().sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      message: "All properties fetched successfully",
+      count: properties.length,
+      properties: properties,
+    });
+  } catch (error) {
+    console.error("Error fetching all properties:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: error.message,
+    });
+  }
+};
