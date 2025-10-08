@@ -5,6 +5,8 @@ import connectDB from "./config/db.js"; // ✅ Import DB connection
 import BlogRoutes from "./routes/blogRoutes.js";
 import propertyRoutes from "./routes/propertyRoutes.js";
 import popupRoute from "./routes/PopupRoute.js";
+import newsletterRoutes from "./routes/newsletterRoutes.js";
+import callbackRoutes from "./routes/callbackRoutes.js";
 
 dotenv.config();
 connectDB();
@@ -24,13 +26,13 @@ app.use(express.json());
 app.use("/api/blogs", BlogRoutes); // ✅ better naming
 app.use("/api/properties", propertyRoutes);
 app.use("/api/leads", popupRoute);
+app.use("/api/newsletter", newsletterRoutes);
+app.use("/api/callbacks", callbackRoutes);
 
 // Test route
 app.get("/", (req, res) => {
   res.send("Backend running ✅");
 });
-
-
 
 // Start server
 const PORT = process.env.PORT || 3000;

@@ -10,11 +10,13 @@ import {
   getHomePageProperties,
   addToHomePage,
   removeFromHomePage,
+  searchProperties,
 } from "../Controller/propertyController.js";
 import upload from "../middleware/uploadMiddleware.js";
 
 const router = express.Router();
-
+// Search route (POST for complex filter data)
+router.post("/search", searchProperties);
 // @route   POST /api/properties/create
 // @desc    Create a new property with multiple images
 // @access  Admin

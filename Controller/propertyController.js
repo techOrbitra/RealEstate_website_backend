@@ -81,13 +81,14 @@ export const createProperty = async (req, res) => {
   }
 };
 
+
 // @desc   Get all properties with enhanced filters
 // @route  GET /api/properties
 export const getProperties = async (req, res) => {
   try {
     const {
       page = 1,
-      limit = 12, // ✅ Changed default to 12
+      limit = 12,
       city,
       location,
       propertyType,
@@ -96,16 +97,17 @@ export const getProperties = async (req, res) => {
       maxPrice,
       bhkCount,
       constructionStatus,
+      amenities, // ✅ Added amenities filter
     } = req.query;
 
     const query = {};
 
-    // ✅ All filters are now case-insensitive
+    // All filters are case-insensitive
     if (city) query.city = new RegExp(city.trim(), "i");
     if (location) query.location = new RegExp(location.trim(), "i");
     if (propertyType) query.propertyType = new RegExp(propertyType.trim(), "i");
     if (propertyStatus)
-      query.propertyStatus = new RegExp(`^${propertyStatus.trim()}$`, "i"); // ✅ FIXED
+      query.propertyStatus = new RegExp(`^${propertyStatus.trim()}$`, "i");
     if (minPrice || maxPrice) {
       query.startingPrice = {};
       if (minPrice) query.startingPrice.$gte = Number(minPrice);
@@ -116,7 +118,32 @@ export const getProperties = async (req, res) => {
       query.constructionStatus = new RegExp(
         `^${constructionStatus.trim()}$`,
         "i"
-      ); // ✅ FIXED
+      );
+
+    // ✅ FIXED: Amenities filter with case-insensitive partial matching
+    if (amenities) {
+      // Parse amenities if it's a JSON string
+      let amenitiesArray = amenities;
+      if (typeof amenities === "string") {
+        try {
+          amenitiesArray = JSON.parse(amenities);
+        } catch (e) {
+          amenitiesArray = [amenities];
+        }
+      }
+
+      if (Array.isArray(amenitiesArray) && amenitiesArray.length > 0) {
+        const amenityRegexes = amenitiesArray.map(
+          (amenity) => new RegExp(amenity.trim(), "i")
+        );
+
+        query.$and = amenityRegexes.map((regex) => ({
+          amenities: { $elemMatch: { $regex: regex } },
+        }));
+
+        console.log(`🔍 Filtering by amenities: ${amenitiesArray.join(", ")}`);
+      }
+    }
 
     console.log("🔍 Query filters:", query);
 
@@ -125,7 +152,9 @@ export const getProperties = async (req, res) => {
       .select({
         images: { $slice: 1 },
         propertyStatus: 1,
+        propertyType: 1,
         title: 1,
+        city: 1,
         location: 1,
         bhkCount: 1,
         bathCount: 1,
@@ -135,7 +164,7 @@ export const getProperties = async (req, res) => {
         startingPrice: 1,
       })
       .sort({ createdAt: -1 })
-      .limit(Number(limit)) // ✅ Ensure it's a number
+      .limit(Number(limit))
       .skip((Number(page) - 1) * Number(limit));
 
     console.log("🔍 Found properties:", properties.length);
@@ -145,7 +174,9 @@ export const getProperties = async (req, res) => {
       _id: property._id,
       image: property.images?.[0] || null,
       propertyStatus: property.propertyStatus,
+      propertyType: property.propertyType,
       title: property.title,
+      city: property.city,
       location: property.location,
       bhkCount: property.bhkCount,
       bathCount: property.bathCount,
@@ -518,6 +549,170 @@ export const getHomePageProperties = async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching homepage properties:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: error.message,
+    });
+  }
+};
+
+// @desc   Search properties with all filters (Direct API call from search form)
+// @route  POST /api/properties/search
+// @access Public
+export const searchProperties = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 12,
+      tab,
+      city,
+      location,
+      propertyType,
+      price,
+      developer,
+      bedrooms,
+      bathrooms,
+      areaSize,
+      amenities, // ✅ Amenities included in main search
+    } = req.body;
+
+    console.log("🔍 Search request received:", req.body);
+
+    const query = {};
+
+    // Property Status filter (tab)
+    if (tab && tab !== "all") {
+      const statusMap = {
+        rent: "Rent",
+        buy: "Buy",
+        offplan: "Off-Plan",
+      };
+      query.propertyStatus = new RegExp(`^${statusMap[tab]}$`, "i");
+    }
+
+    // City filter (case-insensitive, partial match)
+    if (city && city.trim()) {
+      query.city = new RegExp(city.trim(), "i");
+    }
+
+    // Location filter (case-insensitive, partial match)
+    if (location && location.trim()) {
+      query.location = new RegExp(location.trim(), "i");
+    }
+
+    // Property Type filter (case-insensitive, exact match)
+    if (propertyType && propertyType.trim()) {
+      query.propertyType = new RegExp(`^${propertyType.trim()}$`, "i");
+    }
+
+    // Developer filter (case-insensitive, partial match)
+    if (developer && developer.trim()) {
+      query.developer = new RegExp(developer.trim(), "i");
+    }
+
+    // Price Range filter
+    if (price && price !== "" && price !== "Any") {
+      if (price === "above") {
+        query.startingPrice = { $gte: 5000000 };
+      } else {
+        const priceValue = Number(price);
+        if (priceValue === 1000000) {
+          query.startingPrice = { $gte: 100000, $lte: 1000000 };
+        } else if (priceValue === 2000000) {
+          query.startingPrice = { $gte: 1000000, $lte: 2000000 };
+        } else if (priceValue === 3000000) {
+          query.startingPrice = { $gte: 2000000, $lte: 3000000 };
+        } else if (priceValue === 4000000) {
+          query.startingPrice = { $gte: 3000000, $lte: 4000000 };
+        } else if (priceValue === 5000000) {
+          query.startingPrice = { $gte: 4000000, $lte: 5000000 };
+        }
+      }
+    }
+
+    // Bedrooms filter (exact match)
+    if (bedrooms && bedrooms.trim()) {
+      const bhkMatch = bedrooms.match(/(\d+)/);
+      if (bhkMatch) {
+        query.bhkCount = Number(bhkMatch[1]);
+      }
+    }
+
+    // Bathrooms filter (exact match)
+    if (bathrooms && bathrooms.trim()) {
+      const bathMatch = bathrooms.match(/(\d+)/);
+      if (bathMatch) {
+        query.bathCount = Number(bathMatch[1]);
+      }
+    }
+
+    // Area Size filter (minimum area)
+    if (areaSize && areaSize.trim()) {
+      const areaSizeNum = Number(areaSize);
+      if (!isNaN(areaSizeNum) && areaSizeNum > 0) {
+        query.totalArea = { $gte: areaSizeNum };
+      }
+    }
+
+    // ✅ Amenities filter (property must have ALL selected amenities)
+    if (amenities && Array.isArray(amenities) && amenities.length > 0) {
+      query.amenities = { $all: amenities };
+      console.log(`🔍 Filtering by amenities: ${amenities.join(", ")}`);
+    }
+
+    console.log("🔍 Final query:", JSON.stringify(query, null, 2));
+
+    // Fetch properties
+    const properties = await Property.find(query)
+      .select({
+        images: { $slice: 1 },
+        propertyStatus: 1,
+        propertyType: 1,
+        title: 1,
+        city: 1,
+        location: 1,
+        bhkCount: 1,
+        bathCount: 1,
+        totalArea: 1,
+        handover: 1,
+        amenities: { $slice: 5 },
+        startingPrice: 1,
+      })
+      .sort({ createdAt: -1 })
+      .limit(Number(limit))
+      .skip((Number(page) - 1) * Number(limit));
+
+    console.log(`✅ Found ${properties.length} properties`);
+
+    // Transform data
+    const transformedProperties = properties.map((property) => ({
+      _id: property._id,
+      image: property.images?.[0] || null,
+      propertyStatus: property.propertyStatus,
+      propertyType: property.propertyType,
+      title: property.title,
+      city: property.city,
+      location: property.location,
+      bhkCount: property.bhkCount,
+      bathCount: property.bathCount,
+      totalArea: property.totalArea,
+      handover: property.handover,
+      amenities: property.amenities || [],
+      startingPrice: property.startingPrice,
+    }));
+
+    const count = await Property.countDocuments(query);
+
+    res.status(200).json({
+      success: true,
+      properties: transformedProperties,
+      totalPages: Math.ceil(count / limit),
+      currentPage: Number(page),
+      total: count,
+    });
+  } catch (error) {
+    console.error("❌ Error searching properties:", error);
     res.status(500).json({
       success: false,
       message: "Server Error",
