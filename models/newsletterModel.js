@@ -41,6 +41,7 @@ const NewsletterSchema = new mongoose.Schema(
 // Index for faster email lookups
 NewsletterSchema.index({ email: 1 });
 
-const Newsletter = mongoose.model("Newsletter", NewsletterSchema);
+const Newsletter =
+  mongoose.models.Newsletter || mongoose.model("Newsletter", NewsletterSchema);
 
 export default Newsletter;

@@ -10,7 +10,7 @@ import contactRoutes from "./routes/contactRoutes.js";
 import popupRoute from "./routes/PopupRoute.js";
 import newsletterRoutes from "./routes/newsletterRoutes.js";
 import callbackRoutes from "./routes/callbackRoutes.js";
-
+import authRoutes from "./routes/authRoutes.js";
 
 dotenv.config();
 connectDB();
@@ -18,9 +18,9 @@ connectDB();
 const app = express();
 
 // Middleware
-app.use(
+app.use(  
   cors({
-    origin: ["http://localhost:5173"], // ✅ allow frontend
+    origin: ["http://localhost:5173","http://localhost:5174"], // ✅ allow frontend
     credentials: true,
   })
 );
@@ -35,6 +35,8 @@ app.use("/api/leads", popupRoute);
 app.use("/api/newsletter", newsletterRoutes);
 app.use("/api/callbacks", callbackRoutes);
 
+//auth for admin
+app.use("/api/auth", authRoutes);
 // Test route
 app.get("/", (req, res) => {
   res.send("Backend running ✅");

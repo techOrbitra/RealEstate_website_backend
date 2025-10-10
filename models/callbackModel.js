@@ -73,9 +73,8 @@ CallbackRequestSchema.index({ email: 1 });
 CallbackRequestSchema.index({ status: 1 });
 CallbackRequestSchema.index({ createdAt: -1 });
 
-const CallbackRequest = mongoose.model(
-  "CallbackRequest",
-  CallbackRequestSchema
-);
+const CallbackRequest =
+  mongoose.models.CallbackRequest ||
+  mongoose.model("CallbackRequest", CallbackRequestSchema);
 
 export default CallbackRequest;

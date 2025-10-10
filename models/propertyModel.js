@@ -241,6 +241,8 @@ PropertySchema.index({ developer: 1 });
 PropertySchema.index({ bhkCount: 1 });
 PropertySchema.index({ constructionStatus: 1 });
 
-const Property = mongoose.model("Property", PropertySchema);
+
+const Property =
+  mongoose.models.Property || mongoose.model("Property", PropertySchema);
 
 export default Property;
